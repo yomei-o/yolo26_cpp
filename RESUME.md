@@ -23,11 +23,11 @@ yolo26 = yolo11 backbone/neck + (arch26, L22 Bottleneck+PSABlock, no-DFL end2end
 2. **ONNX I/O.** Port `onnx.hpp` / `onnx_run.hpp` + an `export_onnx26` (like the sibling repos):
    export the trained net to ONNX and verify against onnxruntime. Handle the no-DFL box (4) +
    dual-branch / NMS-free head in the exported graph.
-3. **Evaluation tool (val mAP).** Port `metrics.hpp` COCO-mAP path into a val routine over a
-   dataset (letterbox eval, NMS-free decode from o2o) → mAP@0.5 / mAP@0.5:0.95; wire into the CLI.
-4. **Unified CLI `yolo`.** One `yolo <train|val|detect|export> [--flags]` reading a standard
-   Ultralytics `data.yaml` (mirror `pure/yolo.cpp` in the sibling repos), replacing the separate
-   `train_cli26` / `detect26` binaries.
+3. ✅ **Evaluation tool (val mAP).** `pure/yolo26.cpp` `val`/train run COCO-mAP over a dataset
+   (letterbox eval, NMS-free o2o decode) → mAP@0.5 / mAP@0.5:0.95.
+4. ✅ **Unified CLI `yolo26`.** `yolo26 <train|val|detect> [--flags]` reads a standard Ultralytics
+   `data.yaml` (`--arch <dir>` for size). (Supersedes the standalone `train_cli26`/`detect26`.)
+   Still TODO: an `export` subcommand once ONNX is in.
 5. **All sizes n/s/m/l/x.** arch26 per scale (widths from the `scales` in the yaml); per-size
    arch dirs + init weights (like the sibling repos' `pure/ref/arch/<model>/`).
 6. **Real-data convergence + parity.** Train COCO128 to sensible boxes; add a decoded-boxes
