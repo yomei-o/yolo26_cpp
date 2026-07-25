@@ -23,18 +23,20 @@ yolo26 = yolo11 backbone/neck + (arch26, L22 Bottleneck+PSABlock, no-DFL end2end
    `train_cli26` writes `last/best.pt`; `load_net_unfused_pt` loads. Add: load a real Ultralytics
    `yolo26n.pt` (module checkpoint) for transfer-learning init + confirm the saved `.pt` loads
    back into Ultralytics (0 unexpected keys, incl. the one2one_* head tensors).
-2. **ONNX I/O.** Port `onnx.hpp` / `onnx_run.hpp` + an `export_onnx26` (like the sibling repos):
-   export the trained net to ONNX and verify against onnxruntime. Handle the no-DFL box (4) +
-   dual-branch / NMS-free head in the exported graph.
+2. ✅ **ONNX export.** `onnx_export26.cpp` -> yolo26n.onnx (opset 13, no deps), verified vs
+   ultralytics via onnxruntime (`onnx_verify26.py`) = 7e-5 MATCH (o2m+o2o box/cls, 3 levels).
+   TODO: an in-CLI `export` subcommand + ONNX->engine import round-trip if needed.
 3. ✅ **Evaluation tool (val mAP).** `pure/yolo26.cpp` `val`/train run COCO-mAP over a dataset
    (letterbox eval, NMS-free o2o decode) → mAP@0.5 / mAP@0.5:0.95.
 4. ✅ **Unified CLI `yolo26`.** `yolo26 <train|val|detect> [--flags]` reads a standard Ultralytics
    `data.yaml` (`--arch <dir>` for size). (Supersedes the standalone `train_cli26`/`detect26`.)
    Still TODO: an `export` subcommand once ONNX is in.
-5. **All sizes n/s/m/l/x.** arch26 per scale (widths from the `scales` in the yaml); per-size
-   arch dirs + init weights (like the sibling repos' `pure/ref/arch/<model>/`).
-6. **Real-data convergence + parity.** Train COCO128 to sensible boxes; add a decoded-boxes
-   parity check vs Ultralytics (ultralytics is available locally).
+5. ✅ **All sizes n/s/m/l/x.** `pure/ref/arch/yolo26{n,s,m,l,x}/` (manifest+names+arch26); the CLI
+   `--arch <dir>` selects it (net26 forward is arch26-driven). Verified yolo26l (psa=2, 190L) runs.
+   TODO: ship pretrained weights per size (download yolo26{s,m,l,x}.pt).
+6. **Real-data training** — pretrained yolo26n on COCO128 gives **val mAP@0.5 0.504 /
+   mAP@0.5:0.95 0.370** @imgsz320 (eval pipeline validated on real weights). Fine-tune runs;
+   TODO: confirm multi-epoch convergence (CPU is slow -> use GPU/device backend later).
 7. **Speed backends (later).** Device-resident Thrust engine (CPU/GPU one source) + optional
    Eigen (CPU) and cuDNN (GPU) conv backends, exactly like yolov8/5/11/x.
 8. **Ship demo weights + Colab notebooks** (train→detect→show; parity) once converged.
