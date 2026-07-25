@@ -47,6 +47,10 @@ static Args parse_args(int argc,char**argv,int start){ Args a; for(int i=start;i
 
 static ProviderU load_model(const std::string& weights){ std::ifstream t(weights);
   if(t.good()){ printf("weights <- %s (pure C++)\n",weights.c_str()); return load_net_unfused_pt(DN,weights);} return load_net_unfused(DN); }
+// arch26.txt (psa_n + 8x "n c3k inner") selects the size; falls back to yolo26n if absent.
+static Arch11 load_arch26(){ std::ifstream f(DN+"arch26.txt"); if(!f) return arch26_n();
+  Arch11 A; f>>A.psa_n; int64_t n,c,i; while(f>>n>>c>>i) A.c3.push_back({n,i,(bool)c});
+  if(A.psa_n<1||A.c3.size()!=8){ printf("bad %sarch26.txt\n",DN.c_str()); std::exit(1);} return A; }
 
 // direct decode (o2o head): box ltrb (grid) -> xyxy (image) into (4+nc)*A; cls sigmoid.
 static void decode26(const std::vector<float>& box, const std::vector<float>& cls,
@@ -70,7 +74,7 @@ static double run_val(Dataset& va, ProviderU& prov, int64_t S){
   std::vector<float> ax,ay,st; make_anchors(S,ax,ay,st); int64_t A=(int64_t)st.size();
   std::vector<mapeval::Image> imgs;
   for(auto& s: va.items){ Letterbox lb; auto xi=load_image_letterbox(s.img,S,lb);
-    prov.i=0; Head26U h=yolo26n_forward_u(xi,prov,false,arch26_n());
+    prov.i=0; Head26U h=yolo26n_forward_u(xi,prov,false,load_arch26());
     std::vector<Tensor> bx={h.o2o[0].first,h.o2o[1].first,h.o2o[2].first}, cs={h.o2o[0].second,h.o2o[1].second,h.o2o[2].second};
     auto pd=pack_levels(bx,1,A,4); auto ps=pack_levels(cs,1,A,NC0);
     std::vector<float> pred; decode26(pd->data,ps->data,ax,ay,st,A,pred);
@@ -92,7 +96,7 @@ static int cmd_train(const Args& a){
   int closeMosaic=a.geti("close-mosaic",std::max(1,EPOCHS/10)); float lr0=a.getf("lr",1e-3f);
   Dataset tr=read_yolo_dataset(join(dy.path,dy.train),S), va=read_yolo_dataset(join(dy.path,dy.val),S);
   printf("yolo26n train=%zu val=%zu imgsz=%lld batch=%d epochs=%d\n", tr.items.size(),va.items.size(),(long long)S,BATCH,EPOCHS);
-  auto prov=load_model(weights); Arch11 ARC=arch26_n();
+  auto prov=load_model(weights); Arch11 ARC=load_arch26();
   std::vector<Tensor> params; for(auto&L:prov.layers){ params.push_back(L.w); if(L.kind==1){params.push_back(L.gamma);params.push_back(L.beta);} else params.push_back(L.b);}
   int warmup=a.geti("warmup",std::max(1,((int)tr.items.size()+BATCH-1)/BATCH)); Adam opt(params,lr0,0.9f,0.999f,1e-8f,5e-4f,false);
   struct Lv{int64_t h,w;float s;}; std::vector<Lv> lv={{S/8,S/8,8.f},{S/16,S/16,16.f},{S/32,S/32,32.f}};
@@ -133,7 +137,7 @@ static int cmd_detect(const Args& a){
   auto prov=load_model(a.get("weights","best.pt"));
   int w0,h0,ch; unsigned char* im=stbi_load(src.c_str(),&w0,&h0,&ch,3); if(!im){printf("cannot load %s\n",src.c_str());return 1;}
   Letterbox lb; auto x=load_image_letterbox(src,S,lb); std::vector<float> ax,ay,st; make_anchors(S,ax,ay,st); int64_t A=(int64_t)st.size();
-  prov.i=0; Head26U h=yolo26n_forward_u(x,prov,false,arch26_n());
+  prov.i=0; Head26U h=yolo26n_forward_u(x,prov,false,load_arch26());
   std::vector<Tensor> bx={h.o2o[0].first,h.o2o[1].first,h.o2o[2].first},cs={h.o2o[0].second,h.o2o[1].second,h.o2o[2].second};
   auto pd=pack_levels(bx,1,A,4); auto ps=pack_levels(cs,1,A,NC0); std::vector<float> pred; decode26(pd->data,ps->data,ax,ay,st,A,pred);
   auto dets=nms_free(pred,A,conf,300);

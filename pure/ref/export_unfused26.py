@@ -6,7 +6,7 @@ import os, sys, torch, torch.nn as nn
 from ultralytics import YOLO
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-D = os.path.join(HERE, "data_net"); os.makedirs(D, exist_ok=True)
+D = sys.argv[3] if len(sys.argv)>3 else os.path.join(HERE, "data_net"); os.makedirs(D, exist_ok=True)
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "yolo26"
 def is_c3k(m): return type(m).__name__ == "C3k"
 
@@ -65,4 +65,12 @@ if getattr(det, "end2end", False): emit_branch(det.one2one_cv2, det.one2one_cv3)
 
 open(os.path.join(D, "manifest_unfused.txt"), "w").write(f"{idx[0]}\n" + "\n".join(lines) + "\n")
 open(os.path.join(D, "names.txt"), "w").write("\n".join(names) + "\n")
-print(f"unfused: {idx[0]} layers, {len(names)} tensors -> {os.path.relpath(D)}")
+_arch, _psa = [], 1
+for _m in L:
+    t = type(_m).__name__
+    if t == "C3k2":
+        c3k = is_c3k(_m.m[0]); inn = len(_m.m[0].m) if c3k else 0
+        _arch.append((len(_m.m), 1 if c3k else 0, inn))
+    elif t == "C2PSA": _psa = len(_m.m)
+open(os.path.join(D, "arch26.txt"), "w").write(f"{_psa}\n" + "\n".join(f"{n} {c} {i}" for n,c,i in _arch) + "\n")
+print(f"unfused: {idx[0]} layers, {len(names)} tensors, arch26 psa={_psa} -> {os.path.relpath(D)}")
