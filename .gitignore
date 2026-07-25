@@ -21,3 +21,7 @@ __pycache__/
 !weights/yolo11n/weights.bin
 !weights/yolo11n/anchors.bin
 !yolo11n.pt
+!weights/yolo26n/
+!weights/yolo26n/weights.bin
+!assets/
+!assets/*.jpg
