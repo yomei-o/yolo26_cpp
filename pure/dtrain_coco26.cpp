@@ -2,7 +2,8 @@
 // Device fwd(train BN, EMA running stats)+bwd+Adam; trusted host v26 loss (no-DFL, dual head:
 // one2many topk=10 + one2one topk=1) bridged via device-head -> host-leaf -> loss -> inject grad
 // -> dbackward_from. Saves last.pt/best.pt. Times s/epoch.
-//   run: dtrain_coco26 <images_dir> <imgsz> <batch> <epochs> [weights.pt] [arch_dir]  (C2PSA/PSABlock heavy -> imgsz<=96)
+//   run: dtrain_coco26 <images_dir> <imgsz> <batch> <epochs> [weights.pt] [arch_dir] [lr]
+//        (lr default 1e-3 for from-scratch; pass ~1e-4 to fine-tune a pretrained model without drifting it)
 //   GPU: nvcc -x cu -O2 -std=c++17 --extended-lambda -arch=native -DUSE_CUDA [-DUSE_CUBLAS -lcublas] -Ipure/third_party pure/dtrain_coco26.cpp -o dtrain_coco26
 #define STB_IMAGE_IMPLEMENTATION
 #include "dataset.hpp"
@@ -25,13 +26,14 @@ int main(int argc, char** argv) {
   int BATCH = argc>3?atoi(argv[3]):4, EPOCHS = argc>4?atoi(argv[4]):3;
   std::string weights = argc>5?argv[5]:"init26.pt";
   std::string DN = argc>6?argv[6]:"pure/ref/data_net/"; if(!DN.empty()&&DN.back()!='/') DN+='/';
+  float LR = argc>7?(float)atof(argv[7]):1e-3f;   // use ~1e-4 to fine-tune a pretrained model (1e-3 drifts its calibration)
 
   ProvD26 prov = dnet26_build(DN, weights);
   std::vector<DT> params = dnet26_params(prov);
-  DAdam opt(params, 1e-3f);
+  DAdam opt(params, LR);
   Arch11 A; { std::ifstream f(DN+"arch26.txt"); if(f){ f>>A.psa_n; int64_t n,c,i; while(f>>n>>c>>i) A.c3.push_back({n,i,(bool)c}); } else A=arch26_n(); }
   Dataset tr = read_yolo_dataset(dir, S);
-  printf("yolo26 device train=%zu imgsz=%lld batch=%d epochs=%d arch=%s\n", tr.items.size(),(long long)S,BATCH,EPOCHS,DN.c_str());
+  printf("yolo26 device train=%zu imgsz=%lld batch=%d epochs=%d lr=%.0e arch=%s\n", tr.items.size(),(long long)S,BATCH,EPOCHS,LR,DN.c_str());
 
   struct Lv{int64_t h,w;float s;}; std::vector<Lv> lv={{S/8,S/8,8.f},{S/16,S/16,16.f},{S/32,S/32,32.f}};
   std::vector<float> ax,ay,ss,anc_img; for(auto&L:lv)for(int64_t y=0;y<L.h;++y)for(int64_t x=0;x<L.w;++x){ax.push_back(x+.5f);ay.push_back(y+.5f);ss.push_back(L.s);anc_img.push_back((x+.5f)*L.s);anc_img.push_back((y+.5f)*L.s);}
