@@ -60,14 +60,21 @@ int main(int argc, char** argv) {
       int64_t B = bt.B, R = B*A, Mx = bt.M;
       std::vector<float> ancx(R),ancy(R),strd(R); for (int64_t r=0;r<R;++r){int64_t a=r%A;ancx[r]=ax[a];ancy[r]=ay[a];strd[r]=ss[a];}
       prov.i = 0; Head26U h = yolo26n_forward_u(bt.x, prov, true, ARC);
-      std::vector<Tensor> bx={h.o2m[0].first,h.o2m[1].first,h.o2m[2].first}, cs={h.o2m[0].second,h.o2m[1].second,h.o2m[2].second};
-      auto pd = pack_levels(bx, B, A, 4); auto ps = pack_levels(cs, B, A, NC);
-      std::vector<float> pdb, pss; decode_for_tal26(pd, ps, ax, ay, ss, R, A, NC, pdb, pss);
-      auto tal = tal_assign(pss, pdb, anc_img, bt.gt_labels, bt.gt_boxes, bt.mask, B, A, Mx, NC, 10, 0.5f, 6.0f);
-      auto Lo = pure_v26_loss(pd, ps, ancx, ancy, strd, tal.tb, tal.ts, R, NC);
-      backward(Lo.total);
+      // one branch's loss: pack -> TAL(topk) -> reg_max=1 CIoU/BCE. o2m uses topk=10, o2o topk=1.
+      auto branch_loss = [&](std::vector<std::pair<Tensor,Tensor>>& hd, int topk) {
+        std::vector<Tensor> bx={hd[0].first,hd[1].first,hd[2].first}, cs={hd[0].second,hd[1].second,hd[2].second};
+        auto pd = pack_levels(bx, B, A, 4); auto ps = pack_levels(cs, B, A, NC);
+        std::vector<float> pdb, pss; decode_for_tal26(pd, ps, ax, ay, ss, R, A, NC, pdb, pss);
+        auto tal = tal_assign(pss, pdb, anc_img, bt.gt_labels, bt.gt_boxes, bt.mask, B, A, Mx, NC, topk, 0.5f, 6.0f);
+        return pure_v26_loss(pd, ps, ancx, ancy, strd, tal.tb, tal.ts, R, NC);
+      };
+      auto Lm = branch_loss(h.o2m, 10);                  // one2many
+      auto Lo1 = branch_loss(h.o2o, 1);                  // one2one (NMS-free head)
+      auto total_loss = add(Lm.total, Lo1.total);
+      backward(total_loss);
       opt.lr = cosine_lr(gstep, total, 1e-3f, std::max(1, total/20)); opt.step(); ++gstep;
-      eloss += Lo.total->data[0]; ebox += Lo.box->data[0]; ecls += Lo.cls->data[0]; ++nb; free_graph(Lo.total);
+      eloss += total_loss->data[0]; ebox += Lm.box->data[0]+Lo1.box->data[0]; ecls += Lm.cls->data[0]+Lo1.cls->data[0]; ++nb;
+      free_graph(total_loss);
     }
     printf("epoch %2d/%d  loss %6.3f (box %.3f cls %.3f)\n", ep+1, EPOCHS, eloss/nb, ebox/nb, ecls/nb);
     save_ckpt("last.pt"); if (eloss/nb < best) { best = eloss/nb; save_ckpt("best.pt"); }

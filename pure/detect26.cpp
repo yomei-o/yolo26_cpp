@@ -15,6 +15,21 @@
 static const int64_t NC = 80;
 static const char* COCO[80] = {"person","bicycle","car","motorcycle","airplane","bus","train","truck","boat","traffic light","fire hydrant","stop sign","parking meter","bench","bird","cat","dog","horse","sheep","cow","elephant","bear","zebra","giraffe","backpack","umbrella","handbag","tie","suitcase","frisbee","skis","snowboard","sports ball","kite","baseball bat","baseball glove","skateboard","surfboard","tennis racket","bottle","wine glass","cup","fork","knife","spoon","bowl","banana","apple","sandwich","orange","broccoli","carrot","hot dog","pizza","donut","cake","chair","couch","potted plant","bed","dining table","toilet","tv","laptop","mouse","remote","keyboard","cell phone","microwave","oven","toaster","sink","refrigerator","book","clock","vase","scissors","teddy bear","hair drier","toothbrush"};
 
+// NMS-free selection (yolo26 end2end / o2o): one class per anchor, keep top-max_det by score.
+// No IoU suppression — the one2one head is trained to emit ~one high box per object.
+static std::vector<Det> nms_free(const std::vector<float>& pred, int64_t A, int64_t nc, float conf, int max_det) {
+  std::vector<Det> cand;
+  for (int64_t a = 0; a < A; ++a) {
+    float best = -1.f; int bc = 0;
+    for (int64_t c = 0; c < nc; ++c) { float s = pred[(4+c)*A+a]; if (s > best) { best = s; bc = (int)c; } }
+    if (best < conf) continue;
+    cand.push_back({pred[0*A+a], pred[1*A+a], pred[2*A+a], pred[3*A+a], best, bc});
+  }
+  std::sort(cand.begin(), cand.end(), [](const Det& x, const Det& y){ return x.conf > y.conf; });
+  if ((int)cand.size() > max_det) cand.resize(max_det);
+  return cand;
+}
+
 // direct decode: box[a*4..] are ltrb distances (grid units) -> xyxy (image units); cls sigmoid.
 static void decode26(const std::vector<float>& box, const std::vector<float>& cls,
                      const std::vector<float>& ax, const std::vector<float>& ay,
@@ -41,10 +56,11 @@ int main(int argc, char** argv) {
   std::vector<float> ax,ay,st; make_anchors(S, ax, ay, st); int64_t A = (int64_t)st.size();
 
   prov.i = 0; Head26U h = yolo26n_forward_u(x, prov, false, arch26_n());
-  std::vector<Tensor> bx={h.o2m[0].first,h.o2m[1].first,h.o2m[2].first}, cs={h.o2m[0].second,h.o2m[1].second,h.o2m[2].second};
+  auto& hd = h.o2o;                                     // yolo26 inference uses the one2one head (NMS-free)
+  std::vector<Tensor> bx={hd[0].first,hd[1].first,hd[2].first}, cs={hd[0].second,hd[1].second,hd[2].second};
   auto pd = pack_levels(bx, 1, A, 4); auto ps = pack_levels(cs, 1, A, NC);
   std::vector<float> pred; decode26(pd->data, ps->data, ax, ay, st, A, pred);
-  auto dets = nms(pred, A, NC, conf, 0.7f, 300);
+  auto dets = nms_free(pred, A, NC, conf, 300);         // top-k, no IoU NMS
 
   auto put=[&](int px,int py,unsigned char r,unsigned char g,unsigned char b){ if(px<0||py<0||px>=w0||py>=h0)return; unsigned char*p=&im[(py*w0+px)*3];p[0]=r;p[1]=g;p[2]=b; };
   printf("%zu detections:\n", dets.size());
