@@ -26,8 +26,13 @@ build box with **no GPU**, the *host* variants and the *device-on-CPU* variant f
 correctness; the `-DUSE_CUDA` variants need a GPU (see the Colab notebooks below).
 
 ### Colab notebooks (`colab/`)
-- **`gpu_check.ipynb`** — device forward parity, device training, and the cuDNN path on a T4.
-- **`train_detect_cudnn.ipynb`** — train with cuDNN → infer with the trained weights → show the image.
+Runtime → GPU (T4), then Run all.
+- **[gpu_check.ipynb](https://colab.research.google.com/github/yomei-o/yolo26_cpp/blob/main/colab/gpu_check.ipynb)**
+  [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yomei-o/yolo26_cpp/blob/main/colab/gpu_check.ipynb)
+  — device forward parity, device training, and the cuDNN path on a T4.
+- **[train_detect_cudnn.ipynb](https://colab.research.google.com/github/yomei-o/yolo26_cpp/blob/main/colab/train_detect_cudnn.ipynb)**
+  [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/yomei-o/yolo26_cpp/blob/main/colab/train_detect_cudnn.ipynb)
+  — train with cuDNN → infer with the trained weights → show the image.
 
 ## Status — CPU + GPU train + infer WORKING
 yolo26 was reverse-engineered from Ultralytics (see [pure/ref/ARCH.md](pure/ref/ARCH.md)):
