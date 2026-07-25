@@ -1,6 +1,25 @@
 # RESUME — yolo26_cpp remaining work
 
-# ⏭ NEXT SESSION — Colab GPU verification (run these a few times)
+# ✅ GPU VERIFICATION DONE (2026-07-25, real Colab T4 via colab/gpu_check.ipynb)
+
+All three device/GPU checks passed on real hardware (`backend: GPU (CUDA)`):
+1. **device forward parity** — `dnet26_test -DUSE_CUDA` → MATCH, worst 3.1e-2 (train-mode; P5's
+   L22 PSABlock attention softmax amplifies accumulated device-vs-CPU diffs — P3 ~1e-3, P4 ~2e-3,
+   P5 ~2-3e-2; structure verified correct since fused CPU forward == ultralytics = 0.0).
+2. **device training** — `dtrain_coco26 -DUSE_CUDA -DUSE_CUBLAS`, COCO128 from pretrained yolo26n,
+   imgsz320 batch8: loss **10.54 → 5.77** over 10ep, ~84 s/epoch, monotone (beats CPU 3ep=6.96).
+   (s/epoch is host-bridge bound — device heads copied to host for TAL+v26 loss each step, not a
+   pure-GPU-speed number; full speedup needs on-device loss, a future optimization.)
+3. **cuDNN device path** — `dnet26_test -DUSE_CUDA -DUSE_CUDNN -lcudnn` → MATCH, worst 2.15e-2
+   (cuDNN conv slightly tighter). cuDNN inc/lib auto-detected in the notebook.
+
+Notebook: `colab/gpu_check.ipynb` (one-click T4: clone → download yolo26n.pt → export refs →
+parity → training → cuDNN). yolo26_cpp now has NO unverified parts.
+
+Remaining (nice-to-have): on-device loss for real GPU throughput; per-size pretrained weights
+(yolo26{s,m,l,x}.pt) if training other sizes; optional ONNX re-check under Colab onnxruntime.
+
+<details><summary>original Colab GPU plan (now completed) — kept for reference</summary>
 
 Everything below is CPU-verified + nvcc-compiles; the device/GPU path has NOT run on a real GPU
 yet (this dev box has none). On Colab (Runtime→GPU T4), clone main and run:
@@ -33,6 +52,8 @@ yet (this dev box has none). On Colab (Runtime→GPU T4), clone main and run:
 
 Then: ship Colab notebooks (train_detect / gpu_check / dnet_cudnn) like the sibling repos, and
 per-size pretrained weights (download yolo26{s,m,l,x}.pt) if training other sizes.
+
+</details>
 
 
 Verified/working items are in [README.md](README.md); this is the forward-looking TODO.
