@@ -12,7 +12,10 @@ IMG = int(sys.argv[1]) if len(sys.argv) > 1 else 64
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "yolo26"
 def is_c3k(m): return type(m).__name__ == "C3k"
 
-ym = YOLO(MODEL + ".yaml"); L = ym.model.model.eval()   # random init (parity is weight-agnostic)
+import os as _os
+_pt = MODEL + ".pt"
+ym = YOLO(_pt) if _os.path.exists(_pt) else YOLO(MODEL + ".yaml")   # pretrained if present
+L = ym.model.model.eval()
 convs = []   # (w, b, k, s, pad, groups, act)
 def fuse(cv):
     conv, bn = cv.conv, cv.bn

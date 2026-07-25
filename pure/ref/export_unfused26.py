@@ -10,7 +10,11 @@ D = os.path.join(HERE, "data_net"); os.makedirs(D, exist_ok=True)
 MODEL = sys.argv[2] if len(sys.argv) > 2 else "yolo26"
 def is_c3k(m): return type(m).__name__ == "C3k"
 
-ym = YOLO(MODEL + ".yaml"); L = ym.model.model.eval()
+import os as _os
+_pt = MODEL + ".pt"
+ym = YOLO(_pt) if _os.path.exists(_pt) else YOLO(MODEL + ".yaml")   # pretrained if present, else random
+L = ym.model.model.eval()
+print("loaded", _pt if _os.path.exists(_pt) else MODEL+".yaml")
 qn = {id(m): nm for nm, m in ym.model.named_modules()}
 lines, names, idx = [], [], [0]
 def save(n, t): t.detach().contiguous().float().cpu().numpy().tofile(os.path.join(D, n))
