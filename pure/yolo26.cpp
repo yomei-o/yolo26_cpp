@@ -15,6 +15,7 @@
 #include "infer.hpp"          // make_anchors, nms, Det, load_boxes_orig, lb_map
 #include "metrics.hpp"
 #include "ptio.hpp"
+#include "onnx_build26.hpp"    // build_yolo26_onnx, save_onnx
 #include <cstdio>
 #include <numeric>
 #include <algorithm>
@@ -150,9 +151,35 @@ static int cmd_detect(const Args& a){
   stbi_write_png(outp.c_str(),w0,h0,3,im,w0*3); printf("wrote %s\n",outp.c_str()); stbi_image_free(im); return 0;
 }
 
+// fold conv+BN (unfused) -> fused ConvW list, for ONNX export.
+static Provider fold_bn(ProviderU& pu){
+  Provider p;
+  for(auto& L: pu.layers){ int64_t Co=L.w->shape[0],Ci=L.w->shape[1],k=L.w->shape[2],per=Ci*k*k;
+    ConvW c; c.stride=L.stride; c.pad=L.pad; c.groups=L.groups; c.act=L.act;
+    if(L.kind==1){ std::vector<float> fw(L.w->data.size()), fb(Co);
+      for(int64_t co=0;co<Co;++co){ float s=L.gamma->data[co]/std::sqrt(L.rv[co]+L.eps);
+        for(int64_t j=0;j<per;++j) fw[co*per+j]=L.w->data[co*per+j]*s;
+        fb[co]=L.beta->data[co]-L.gamma->data[co]*L.rm[co]/std::sqrt(L.rv[co]+L.eps); }
+      c.w=from_data({Co,Ci,k,k},fw); c.b=from_data({Co},fb);
+    } else { c.w=from_data({Co,Ci,k,k},L.w->data); c.b=from_data({Co},L.b->data); }
+    p.convs.push_back(c); }
+  return p;
+}
+static int cmd_export(const Args& a){
+  int64_t S=a.geti("imgsz",640); auto pu=load_model(a.get("weights","best.pt"));
+  Provider prov=fold_bn(pu);
+  int64_t psa_n; std::vector<int64_t> cn,ci; std::vector<int> cc;
+  { std::ifstream f(DN+"arch26.txt"); f>>psa_n; int64_t x,y,z; while(f>>x>>y>>z){cn.push_back(x);cc.push_back((int)y);ci.push_back(z);} }
+  int64_t nc=NC0; { std::ifstream f(DN+"head26.txt"); if(f) f>>nc; }
+  Graph g=build_yolo26_onnx(prov,psa_n,cn,cc,ci,nc,S);
+  std::string out=a.get("out","yolo26.onnx"); save_onnx(g,out);
+  printf("wrote %s (%zu nodes, consumed %zu/%zu convs, imgsz=%lld)\n", out.c_str(),g.nodes.size(),prov.i,prov.convs.size(),(long long)S);
+  return 0;
+}
+
 int main(int argc,char**argv){ setvbuf(stdout,nullptr,_IONBF,0);
   std::string cmd=argc>1?argv[1]:""; Args a=parse_args(argc,argv,2);
   DN=a.get("arch",DN); if(!DN.empty()&&DN.back()!='/')DN+='/';
-  if(cmd=="train")return cmd_train(a); if(cmd=="val")return cmd_val(a); if(cmd=="detect")return cmd_detect(a);
-  printf("usage: yolo26 <train|val|detect> --flags   (see header of pure/yolo26.cpp)\n"); return 1;
+  if(cmd=="train")return cmd_train(a); if(cmd=="val")return cmd_val(a); if(cmd=="detect")return cmd_detect(a); if(cmd=="export")return cmd_export(a);
+  printf("usage: yolo26 <train|val|detect|export> --flags   (see header of pure/yolo26.cpp)\n"); return 1;
 }
