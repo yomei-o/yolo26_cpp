@@ -1,5 +1,40 @@
 # RESUME — yolo26_cpp remaining work
 
+# ⏭ NEXT SESSION — Colab GPU verification (run these a few times)
+
+Everything below is CPU-verified + nvcc-compiles; the device/GPU path has NOT run on a real GPU
+yet (this dev box has none). On Colab (Runtime→GPU T4), clone main and run:
+
+```bash
+!git clone -q https://github.com/yomei-o/yolo26_cpp.git && cd yolo26_cpp
+!pip -q install ultralytics
+!python pure/ref/export_yolo26.py 64 yolo26n            # fused refs + weights (auto-uses yolo26n.pt)
+!python pure/ref/export_unfused26.py 64 yolo26n         # unfused manifest/names (pretrained bins)
+```
+
+1. **Device fwd parity (GPU)** — expect MATCH vs CPU engine:
+   `!nvcc -x cu -O2 -std=c++17 --extended-lambda -arch=native -DUSE_CUDA -Ipure/third_party pure/dnet26_test.cpp -o d26 && ./d26`
+   (needs init26.pt: `!g++ -O2 -std=c++17 -Ipure/third_party pure/make_init_pt.cpp -o mk && ./mk init26.pt rand x pure/ref/data_net/`)
+   NOTE: train-mode device-vs-CPU was ~6e-2 on CPU-thrust (batch-stat reduction order + P5 double
+   attention). Re-check on GPU; if it's much worse, dig into d26_c3k2_psa / d26_sppf.
+
+2. **Device training (GPU)** — expect loss down + fast s/epoch, and mAP up vs the CPU baseline
+   (pretrained COCO128 val mAP@0.5 0.504 -> CPU fine-tune reached 0.540):
+   `!wget -q https://github.com/ultralytics/yolov5/releases/download/v1.0/coco128.zip && unzip -q -o coco128.zip`
+   `!nvcc -x cu -O2 -std=c++17 --extended-lambda -arch=native -DUSE_CUDA -DUSE_CUBLAS -Ipure/third_party pure/dtrain_coco26.cpp -lcublas -o dtr && ./dtr coco128/images/train2017 320 8 20 init26.pt pure/ref/data_net/`
+   (from pretrained: make init with `./mk init26.pt from yolo26n.pt pure/ref/data_net/`)
+
+3. **cuDNN device path (GPU)** — dtensor.hpp carries the cuDNN-guarded grouped dconv2d:
+   add `-DUSE_CUDNN -lcudnn -I<cudnn_inc> -L<cudnn_lib>` to (1)/(2) (see the sibling repos'
+   `colab/dnet_cudnn_test.ipynb` for auto-detecting cuDNN inc/lib) and confirm MATCH + speed.
+
+4. **(optional) ONNX on Colab** — `onnx_verify26.py` already 5e-5 locally; re-run under Colab
+   onnxruntime for good measure.
+
+Then: ship Colab notebooks (train_detect / gpu_check / dnet_cudnn) like the sibling repos, and
+per-size pretrained weights (download yolo26{s,m,l,x}.pt) if training other sizes.
+
+
 Verified/working items are in [README.md](README.md); this is the forward-looking TODO.
 yolo26 = yolo11 backbone/neck + (arch26, L22 Bottleneck+PSABlock, no-DFL end2end head) — see
 [pure/ref/ARCH.md](pure/ref/ARCH.md).
