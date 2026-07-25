@@ -6,6 +6,26 @@ autograd engine that reproduces the real Ultralytics model **exactly** (parity ~
 training + inference and no Python at run time. CPU **and** GPU (Thrust device engine, cuBLAS,
 cuDNN) are all verified on real hardware.
 
+## Quick start — inference right after `git clone` (no Python, no download)
+
+Pretrained yolo26n weights ship in the repo (`weights/yolo26n/`, BN-fused ~10 MB) with a sample
+image (`assets/bus.jpg`). `demo26` is fully self-contained — it reads only those tracked files:
+
+```sh
+# Windows (MSVC)
+cl /std:c++20 /O2 /EHsc /Zc:preprocessor /DNOMINMAX /Ipure\third_party pure\demo26.cpp
+demo26                          # detects assets/bus.jpg  -> demo26_out.png
+demo26 path\to\your.jpg         # any image
+# Linux/macOS (g++/clang)
+g++ -O2 -std=c++17 -Ipure/third_party pure/demo26.cpp -o demo26 && ./demo26
+```
+
+Expected on `bus.jpg`: `bus 0.93` + 4 `person` (NMS-free one2one head), matching Ultralytics.
+`demo26 [img] [weights_dir] [imgsz] [conf] [out.png]`. No `pure/ref/…` refs needed — those are
+only for the Python parity export / training path. (`detect26`/`train_cli26`/`yolo26` use the
+*unfused* manifest under `pure/ref/data_net/`, which you regenerate once via the export scripts;
+`demo26` needs none of it.)
+
 ## Build variants (same sources, backend chosen by compile flags)
 
 The **host** engine (autograd on CPU) and the **device** engine (`dtensor.hpp`/`dnet26.hpp`, one
