@@ -102,6 +102,7 @@ for m in L[:-1]:
     xt = m(xt)
     saved[m.i] = xt
 p3, p4, p5 = (saved[j] for j in det.f)
+
 levels = [p3, p4, p5]
 def run_branch(cv2, cv3, tag):
     for i, feat in enumerate(levels):

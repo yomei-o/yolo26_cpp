@@ -21,13 +21,21 @@ inline Tensor c3k2_psaU(const Tensor& x, ProviderU& p, bool tr) {
 
 struct Head26U { std::vector<std::pair<Tensor, Tensor>> o2m, o2o; };
 
+// yolo26 SPPF (unfused) with residual (self.add=True).
+inline Tensor sppf26U(const Tensor& x, ProviderU& p, bool tr) {
+  auto x1 = applyU(x, p.next(), tr);
+  auto q1 = maxpool2d(x1, 5, 1, 2), q2 = maxpool2d(q1, 5, 1, 2), q3 = maxpool2d(q2, 5, 1, 2);
+  auto y = applyU(concat_ch({x1, q1, q2, q3}), p.next(), tr);
+  return add(y, x);
+}
+
 inline Head26U yolo26n_forward_u(const Tensor& x, ProviderU& p, bool tr, const Arch11& A = arch26_n()) {
   auto C = [&](const Tensor& t, int i){ return c3k2U(t, p, A.c3[i].n, A.c3[i].c3k, A.c3[i].inner, true, tr); };
   auto x0 = cLU(x, p, tr); auto x1 = cLU(x0, p, tr);
   auto x2 = C(x1, 0); auto x3 = cLU(x2, p, tr);
   auto x4 = C(x3, 1); auto x5 = cLU(x4, p, tr);
   auto x6 = C(x5, 2); auto x7 = cLU(x6, p, tr);
-  auto x8 = C(x7, 3); auto x9 = sppfU(x8, p, tr);
+  auto x8 = C(x7, 3); auto x9 = sppf26U(x8, p, tr);
   auto x10 = c2psaU(x9, p, A.psa_n, tr);
   auto x11 = upsample_nearest(x10, 2); auto x12 = concat_ch({x11, x6}); auto x13 = C(x12, 4);
   auto x14 = upsample_nearest(x13, 2); auto x15 = concat_ch({x14, x4}); auto x16 = C(x15, 5);

@@ -4,19 +4,10 @@ Verified/working items are in [README.md](README.md); this is the forward-lookin
 yolo26 = yolo11 backbone/neck + (arch26, L22 Bottleneck+PSABlock, no-DFL end2end head) — see
 [pure/ref/ARCH.md](pure/ref/ARCH.md).
 
-## ⚠️ TOP PRIORITY BUG — value-dependent forward divergence on pretrained weights
-Forward parity is **exact (0.0)** with random-init weights (`m1_forward26`/`m6_unfused26` MATCH),
-but with the **pretrained** `yolo26n.pt` it MISMATCHES (~54) at ALL detect levels — so pretrained
-`detect` gives wrong boxes/classes (e.g. bus.jpg -> spurious "refrigerator" huge boxes instead of
-bus+persons; Ultralytics gets bus 0.92 + 4 persons 0.9). Since random(BN rm=0/rv=1, tiny convs)
-matches but pretrained(real BN + real dynamic range) diverges, and ALL levels are off, the bug is
-in the SHARED backbone/neck, value-dependent. Suspects: L10 C2PSA / L13+ neck C3k / the L22
-c3k2_psa attention — something whose output ≈correct for near-uniform attention (random) but wrong
-for real attention. **Debug: dump intermediate activations (saved[9]/[10]/[13]/[16]) from
-`export_yolo26.py` and compare to net26 layer-by-layer to find the first diverging block.** Weights
-are confirmed correct (all 594 names matched; bins path gives same result -> not a .pt-read issue).
-
 ## Done
+- **SPPF residual (yolo26 `self.add=True`)** — FIXED. Forward now matches Ultralytics with
+  **pretrained** weights (m1 9.9e-5 / m6 9.5e-5); `detect` on bus.jpg reproduces Ultralytics
+  (bus 0.93 + 4 persons, pixel-level match).
 - Forward (fused `net26.hpp` + BN-train `net26_unfused.hpp`) — **exact parity** vs Ultralytics
   (`m1_forward26` 0.0e+00, `m6_unfused26` 9.5e-7).
 - Loss `v26loss.hpp` (reg_max=1, no DFL: direct box + CIoU + BCE) + TAL.

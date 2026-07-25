@@ -33,6 +33,14 @@ inline Tensor c3k2_psa(const Tensor& x, Provider& p) {
 // Two head branches, each = 3x detect_level (box k3k3plain -> 4, cls dw/pw/dw/pw/plain -> nc).
 struct Head26 { std::vector<std::pair<Tensor, Tensor>> o2m, o2o; };  // (box, cls) per level
 
+// yolo26 SPPF: like yolo11's but with a residual (self.add=True) -> cv2(cat) + x.
+inline Tensor sppf26(const Tensor& x, Provider& p) {
+  auto x1 = conv_apply(x, p.next());
+  auto q1 = maxpool2d(x1, 5, 1, 2), q2 = maxpool2d(q1, 5, 1, 2), q3 = maxpool2d(q2, 5, 1, 2);
+  auto y = conv_apply(concat_ch({x1, q1, q2, q3}), p.next());
+  return add(y, x);
+}
+
 inline Head26 yolo26n_forward(const Tensor& x, Provider& p, const Arch11& A = arch26_n()) {
   auto C = [&](const Tensor& t, int i){ return c3k2(t, p, A.c3[i].n, A.c3[i].c3k, A.c3[i].inner, true); };
   auto x0 = cL(x, p);
@@ -44,7 +52,7 @@ inline Head26 yolo26n_forward(const Tensor& x, Provider& p, const Arch11& A = ar
   auto x6 = C(x5, 2);
   auto x7 = cL(x6, p);
   auto x8 = C(x7, 3);
-  auto x9 = sppf(x8, p);
+  auto x9 = sppf26(x8, p);                               // yolo26 SPPF has a residual (add=True)
   auto x10 = c2psa(x9, p, A.psa_n);
   auto x11 = upsample_nearest(x10, 2);
   auto x12 = concat_ch({x11, x6});
